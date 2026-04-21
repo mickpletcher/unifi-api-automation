@@ -6,12 +6,18 @@ param(
     [Parameter(Mandatory)]
     [PSCredential]$Credential,
 
-    [ValidateSet('Login','GetSites','GetClients','GetDevices','GetWlans','BlockClient','UnblockClient','Logout','Test')]
+    [ValidateSet('Login','GetSites','GetClients','GetDevices','GetWlans','BlockClient','UnblockClient','Logout','Test',
+                 'ExportSites','ExportClients','ExportDevices','ExportWlans')]
     [string]$Action = 'Test',
 
     [string]$Site = 'default',
 
-    [string]$MacAddress
+    [string]$MacAddress,
+
+    [string]$OutputPath,
+
+    [ValidateSet('Json','Csv')]
+    [string]$OutputFormat = 'Json'
 )
 
 Set-StrictMode -Version Latest
@@ -223,6 +229,37 @@ function Invoke-UnifiClientAction {
     Invoke-UnifiRequest -Context $Context -Uri $uri -Method POST -Body $body
 }
 
+function Export-UnifiData {
+    param(
+        [Parameter(Mandatory)]$Data,
+        [Parameter(Mandatory)][string]$OutputPath,
+        [Parameter(Mandatory)][string]$OutputFormat
+    )
+
+    $dir = Split-Path -Path $OutputPath -Parent
+    if (-not [string]::IsNullOrWhiteSpace($dir) -and -not (Test-Path -Path $dir)) {
+        $null = New-Item -ItemType Directory -Path $dir -Force
+    }
+
+    if ($OutputFormat -eq 'Csv') {
+        $Data | Export-Csv -Path $OutputPath -NoTypeInformation -Force
+    }
+    else {
+        $Data | ConvertTo-Json -Depth 10 | Set-Content -Path $OutputPath -Force
+    }
+}
+
+function Assert-ExportParameter {
+    param(
+        [Parameter(Mandatory)][string]$Action,
+        [string]$OutputPath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+        throw "-OutputPath is required for $Action."
+    }
+}
+
 function Disconnect-Unifi {
     param([Parameter(Mandatory)]$Context)
 
@@ -286,6 +323,58 @@ try {
             }
 
             Invoke-UnifiClientAction -Context $context -Site $Site -Command 'unblock-sta' -MacAddress $MacAddress
+        }
+
+        'ExportSites' {
+            Assert-ExportParameter -Action $Action -OutputPath $OutputPath
+            $items = @((Get-UnifiSite -Context $context).data)
+            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat
+            [pscustomobject]@{
+                Success      = $true
+                Action       = $Action
+                OutputPath   = $OutputPath
+                OutputFormat = $OutputFormat
+                ItemCount    = $items.Count
+            }
+        }
+
+        'ExportClients' {
+            Assert-ExportParameter -Action $Action -OutputPath $OutputPath
+            $items = @((Get-UnifiClient -Context $context -Site $Site).data)
+            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat
+            [pscustomobject]@{
+                Success      = $true
+                Action       = $Action
+                OutputPath   = $OutputPath
+                OutputFormat = $OutputFormat
+                ItemCount    = $items.Count
+            }
+        }
+
+        'ExportDevices' {
+            Assert-ExportParameter -Action $Action -OutputPath $OutputPath
+            $items = @((Get-UnifiDevice -Context $context -Site $Site).data)
+            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat
+            [pscustomobject]@{
+                Success      = $true
+                Action       = $Action
+                OutputPath   = $OutputPath
+                OutputFormat = $OutputFormat
+                ItemCount    = $items.Count
+            }
+        }
+
+        'ExportWlans' {
+            Assert-ExportParameter -Action $Action -OutputPath $OutputPath
+            $items = @((Get-UnifiWlan -Context $context -Site $Site).data)
+            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat
+            [pscustomobject]@{
+                Success      = $true
+                Action       = $Action
+                OutputPath   = $OutputPath
+                OutputFormat = $OutputFormat
+                ItemCount    = $items.Count
+            }
         }
 
         'Logout' {
