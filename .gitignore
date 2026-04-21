@@ -1,0 +1,53 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+logs/
+
+# PowerShell
+*.ps1xml
+
+# Secrets (CRITICAL)
+.env
+.env.*
+secrets.json
+*.secret
+*.key
+*.pem
+*.pfx
+
+# UniFi specific
+cookies.txt
+session.json
+
+# Output / temp
+output/
+temp/
+*.tmp
+
+# Node (if you add MCP / n8n tooling later)
+node_modules/
+package-lock.json
+
+# Python (if MCP server gets built)
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Build artifacts
+dist/
+build/
+
+# Coverage / testing
+coverage/
+*.coverage
+
+# GitHub Copilot / AI artifacts (optional)
+.ai/
+.prompts-cache/
