@@ -124,27 +124,55 @@ try {
     switch ($Action) {
         'Login' {
             [pscustomobject]@{
-                Success       = $true
-                BaseUrl       = $context.BaseUrl
-                LoginPath     = $context.LoginPath
-                NetworkPrefix = $context.NetworkPrefix
+                Success   = $true
+                Action    = $Action
+                Data      = [pscustomobject]@{
+                    BaseUrl       = $context.BaseUrl
+                    LoginPath     = $context.LoginPath
+                    NetworkPrefix = $context.NetworkPrefix
+                }
+                ItemCount = $null
             }
         }
 
         'GetSites' {
-            Get-UnifiSite -Context $context
+            $items = @((Get-UnifiSite -Context $context).data)
+            [pscustomobject]@{
+                Success   = $true
+                Action    = $Action
+                Data      = $items
+                ItemCount = $items.Count
+            }
         }
 
         'GetClients' {
-            Get-UnifiClient -Context $context -Site $Site
+            $items = @((Get-UnifiClient -Context $context -Site $Site).data)
+            [pscustomobject]@{
+                Success   = $true
+                Action    = $Action
+                Data      = $items
+                ItemCount = $items.Count
+            }
         }
 
         'GetDevices' {
-            Get-UnifiDevice -Context $context -Site $Site
+            $items = @((Get-UnifiDevice -Context $context -Site $Site).data)
+            [pscustomobject]@{
+                Success   = $true
+                Action    = $Action
+                Data      = $items
+                ItemCount = $items.Count
+            }
         }
 
         'GetWlans' {
-            Get-UnifiWlan -Context $context -Site $Site
+            $items = @((Get-UnifiWlan -Context $context -Site $Site).data)
+            [pscustomobject]@{
+                Success   = $true
+                Action    = $Action
+                Data      = $items
+                ItemCount = $items.Count
+            }
         }
 
         'BlockClient' {
@@ -153,6 +181,12 @@ try {
             }
 
             Invoke-UnifiClientAction -Context $context -Site $Site -Command 'block-sta' -MacAddress $MacAddress
+            [pscustomobject]@{
+                Success   = $true
+                Action    = $Action
+                Data      = $null
+                ItemCount = $null
+            }
         }
 
         'UnblockClient' {
@@ -161,6 +195,12 @@ try {
             }
 
             Invoke-UnifiClientAction -Context $context -Site $Site -Command 'unblock-sta' -MacAddress $MacAddress
+            [pscustomobject]@{
+                Success   = $true
+                Action    = $Action
+                Data      = $null
+                ItemCount = $null
+            }
         }
 
         'ExportSites' {
@@ -218,19 +258,25 @@ try {
         'Logout' {
             Disconnect-Unifi -Context $context
             [pscustomobject]@{
-                Success = $true
-                Message = 'Logged out.'
+                Success   = $true
+                Action    = $Action
+                Data      = $null
+                ItemCount = $null
             }
         }
 
         'Test' {
             $sites = Get-UnifiSite -Context $context
             [pscustomobject]@{
-                Success       = $true
-                BaseUrl       = $context.BaseUrl
-                LoginPath     = $context.LoginPath
-                NetworkPrefix = $context.NetworkPrefix
-                SitesFound    = @($sites.data).Count
+                Success   = $true
+                Action    = $Action
+                Data      = [pscustomobject]@{
+                    BaseUrl       = $context.BaseUrl
+                    LoginPath     = $context.LoginPath
+                    NetworkPrefix = $context.NetworkPrefix
+                    SitesFound    = @($sites.data).Count
+                }
+                ItemCount = $null
             }
         }
     }

@@ -65,7 +65,7 @@ $credential = Get-Credential
 (.\UnifiOps.ps1 `
   -BaseUrl "https://192.168.1.1" `
   -Credential $credential `
-  -Action GetClients).data | ConvertTo-Json -Depth 10
+  -Action GetClients).Data | ConvertTo-Json -Depth 10
 ```
 
 ### Get Clients with Selected Fields
@@ -76,7 +76,7 @@ $credential = Get-Credential
 (.\UnifiOps.ps1 `
   -BaseUrl "https://192.168.1.1" `
   -Credential $credential `
-  -Action GetClients).data |
+  -Action GetClients).Data |
 Select-Object name, hostname, ip, mac, oui, network, is_wired |
 Format-Table -AutoSize
 ```
@@ -91,7 +91,7 @@ $credential = Get-Credential
 (.\UnifiOps.ps1 `
   -BaseUrl "https://192.168.1.1" `
   -Credential $credential `
-  -Action GetClients).data |
+  -Action GetClients).Data |
 Where-Object { $_.last_seen -gt [DateTimeOffset]::UtcNow.AddMinutes(-15).ToUnixTimeSeconds() } |
 Select-Object name, hostname, ip, mac, last_seen |
 Format-Table -AutoSize
@@ -105,7 +105,7 @@ $credential = Get-Credential
 (.\UnifiOps.ps1 `
   -BaseUrl "https://192.168.1.1" `
   -Credential $credential `
-  -Action GetClients).data |
+  -Action GetClients).Data |
 Where-Object {
   $_.name -match "apple" -or
   $_.hostname -match "apple" -or
