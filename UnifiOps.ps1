@@ -32,6 +32,9 @@ Output format for export actions. Valid values: Json, Csv. Default is Json.
 .PARAMETER Force
 Allows export actions to overwrite an existing file. Without this switch, exporting to an existing file path throws an error.
 
+.PARAMETER RetryCount
+Number of attempts for each API request. Applies to transient failures such as HTTP 5xx responses and network errors. HTTP 4xx errors fail immediately regardless of this setting. Default is 3.
+
 .EXAMPLE
 .\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential) -Action Test
 Verifies the connection and returns the site count.
@@ -105,7 +108,9 @@ param(
     [ValidateSet('Json','Csv')]
     [string]$OutputFormat = 'Json',
 
-    [switch]$Force
+    [switch]$Force,
+
+    [int]$RetryCount = 3
 )
 
 Set-StrictMode -Version Latest
@@ -114,7 +119,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'UnifiOps\UnifiOps.Functions.ps1')
 
 try {
-    $context = Connect-Unifi -BaseUrl $BaseUrl -Credential $Credential
+    $context = Connect-Unifi -BaseUrl $BaseUrl -Credential $Credential -RetryCount $RetryCount
 
     switch ($Action) {
         'Login' {

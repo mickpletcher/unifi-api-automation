@@ -1,7 +1,8 @@
 function New-UnifiContext {
     [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory)][string]$BaseUrl
+        [Parameter(Mandatory)][string]$BaseUrl,
+        [int]$RetryCount = 3
     )
 
     if (-not $PSCmdlet.ShouldProcess($BaseUrl, 'Create UniFi session context')) {
@@ -15,6 +16,7 @@ function New-UnifiContext {
         Session       = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
         LoginPath     = $null
         NetworkPrefix = $null
+        RetryCount    = $RetryCount
     }
 }
 
@@ -39,7 +41,30 @@ function Invoke-UnifiRequest {
         $invokeParams['Body'] = ($Body | ConvertTo-Json -Depth 10)
     }
 
-    Invoke-RestMethod @invokeParams
+    $maxAttempts = $Context.RetryCount
+    $attempt = 1
+
+    while ($true) {
+        try {
+            return Invoke-RestMethod @invokeParams
+        }
+        catch {
+            $statusCode = 0
+            if ($null -ne $_.Exception.Response) {
+                $statusCode = [int]$_.Exception.Response.StatusCode
+            }
+
+            $isClientError = $statusCode -ge 400 -and $statusCode -le 499
+
+            if ($isClientError -or $attempt -ge $maxAttempts) {
+                throw
+            }
+
+            Write-Warning "Request to '$Uri' failed on attempt $attempt of $maxAttempts. Retrying in 2 seconds. Error: $_"
+            Start-Sleep -Seconds 2
+            $attempt++
+        }
+    }
 }
 
 function Test-UnifiLoginPath {
@@ -87,10 +112,11 @@ function Connect-Unifi {
     #>
     param(
         [Parameter(Mandatory)][string]$BaseUrl,
-        [Parameter(Mandatory)][PSCredential]$Credential
+        [Parameter(Mandatory)][PSCredential]$Credential,
+        [int]$RetryCount = 3
     )
 
-    $context = New-UnifiContext -BaseUrl $BaseUrl
+    $context = New-UnifiContext -BaseUrl $BaseUrl -RetryCount $RetryCount
 
     $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Credential.GetNetworkCredential().SecurePassword)
     try {
