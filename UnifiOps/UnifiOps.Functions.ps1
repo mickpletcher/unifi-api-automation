@@ -78,6 +78,13 @@ function Test-UnifiLoginPath {
 }
 
 function Connect-Unifi {
+    <#
+    .SYNOPSIS
+    Authenticates to a UniFi controller and returns a session context.
+
+    .EXAMPLE
+    $ctx = Connect-Unifi -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential)
+    #>
     param(
         [Parameter(Mandatory)][string]$BaseUrl,
         [Parameter(Mandatory)][PSCredential]$Credential
@@ -152,6 +159,13 @@ function Get-UnifiApiUri {
 }
 
 function Get-UnifiSite {
+    <#
+    .SYNOPSIS
+    Returns all sites on the controller.
+
+    .EXAMPLE
+    $sites = Get-UnifiSite -Context $ctx
+    #>
     param([Parameter(Mandatory)]$Context)
 
     $uri = Get-UnifiApiUri -Context $Context -RelativePath '/api/self/sites'
@@ -159,6 +173,13 @@ function Get-UnifiSite {
 }
 
 function Get-UnifiClient {
+    <#
+    .SYNOPSIS
+    Returns connected clients for a site.
+
+    .EXAMPLE
+    $clients = Get-UnifiClient -Context $ctx -Site 'default'
+    #>
     param(
         [Parameter(Mandatory)]$Context,
         [Parameter(Mandatory)][string]$Site
@@ -169,6 +190,13 @@ function Get-UnifiClient {
 }
 
 function Get-UnifiDevice {
+    <#
+    .SYNOPSIS
+    Returns network devices for a site.
+
+    .EXAMPLE
+    $devices = Get-UnifiDevice -Context $ctx -Site 'default'
+    #>
     param(
         [Parameter(Mandatory)]$Context,
         [Parameter(Mandatory)][string]$Site
@@ -179,6 +207,13 @@ function Get-UnifiDevice {
 }
 
 function Get-UnifiWlan {
+    <#
+    .SYNOPSIS
+    Returns WLAN configurations for a site.
+
+    .EXAMPLE
+    $wlans = Get-UnifiWlan -Context $ctx -Site 'default'
+    #>
     param(
         [Parameter(Mandatory)]$Context,
         [Parameter(Mandatory)][string]$Site
@@ -189,6 +224,13 @@ function Get-UnifiWlan {
 }
 
 function Invoke-UnifiClientAction {
+    <#
+    .SYNOPSIS
+    Blocks or unblocks a client by MAC address.
+
+    .EXAMPLE
+    Invoke-UnifiClientAction -Context $ctx -Site 'default' -Command 'block-sta' -MacAddress 'aa:bb:cc:dd:ee:ff'
+    #>
     param(
         [Parameter(Mandatory)]$Context,
         [Parameter(Mandatory)][string]$Site,
@@ -207,6 +249,13 @@ function Invoke-UnifiClientAction {
 }
 
 function Export-UnifiData {
+    <#
+    .SYNOPSIS
+    Writes data to a JSON or CSV file at the specified output path.
+
+    .EXAMPLE
+    Export-UnifiData -Data $clients -OutputPath '.\clients.json' -OutputFormat 'Json'
+    #>
     param(
         [Parameter(Mandatory)]$Data,
         [Parameter(Mandatory)][string]$OutputPath,
@@ -266,6 +315,13 @@ function Assert-ExportParameter {
 }
 
 function Disconnect-Unifi {
+    <#
+    .SYNOPSIS
+    Logs out of a UniFi session and closes the web session.
+
+    .EXAMPLE
+    Disconnect-Unifi -Context $ctx
+    #>
     param([Parameter(Mandatory)]$Context)
 
     $logoutCandidates = @(
