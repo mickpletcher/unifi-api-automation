@@ -260,9 +260,8 @@ function Assert-ExportParameter {
         throw "-OutputPath is required for $Action."
     }
 
-    # Task 1: invalid character check
     # GetInvalidPathChars() returns only control chars and pipe on Windows.
-    # Combining with GetInvalidFileNameChars() and removing valid path chars covers the full set.
+    # Combining with GetInvalidFileNameChars() and removing valid path separators covers the full set.
     $validInPath = [char[]]@('\', '/', ':')
     $invalidChars = ([System.IO.Path]::GetInvalidFileNameChars() + [System.IO.Path]::GetInvalidPathChars()) |
         Select-Object -Unique |
@@ -273,18 +272,15 @@ function Assert-ExportParameter {
         throw "OutputPath '$OutputPath': contains invalid characters $charList."
     }
 
-    # Task 2: drive existence check (skip for relative paths)
     $qualifier = Split-Path -Path $OutputPath -Qualifier -ErrorAction SilentlyContinue
     if (-not [string]::IsNullOrWhiteSpace($qualifier) -and -not (Test-Path -Path $qualifier)) {
         throw "OutputPath '$OutputPath': drive '$qualifier' is not available."
     }
 
-    # Task 3: directory target check
     if (Test-Path -Path $OutputPath -PathType Container) {
         throw "OutputPath '$OutputPath': must target a file, not a directory."
     }
 
-    # Task 4: extension mismatch warning
     $ext = [System.IO.Path]::GetExtension($OutputPath).ToLower()
     $expectedExt = if ($OutputFormat -eq 'Json') { '.json' } else { '.csv' }
     if ($ext -ne $expectedExt) {
