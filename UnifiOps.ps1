@@ -252,11 +252,43 @@ function Export-UnifiData {
 function Assert-ExportParameter {
     param(
         [Parameter(Mandatory)][string]$Action,
+        [Parameter(Mandatory)][string]$OutputFormat,
         [string]$OutputPath
     )
 
     if ([string]::IsNullOrWhiteSpace($OutputPath)) {
         throw "-OutputPath is required for $Action."
+    }
+
+    # Task 1: invalid character check
+    # GetInvalidPathChars() returns only control chars and pipe on Windows.
+    # Combining with GetInvalidFileNameChars() and removing valid path chars covers the full set.
+    $validInPath = [char[]]@('\', '/', ':')
+    $invalidChars = ([System.IO.Path]::GetInvalidFileNameChars() + [System.IO.Path]::GetInvalidPathChars()) |
+        Select-Object -Unique |
+        Where-Object { $validInPath -notcontains $_ }
+    $foundInvalid = $invalidChars | Where-Object { $OutputPath.Contains([string]$_) }
+    if ($foundInvalid) {
+        $charList = ($foundInvalid | ForEach-Object { "[$_]" }) -join ' '
+        throw "OutputPath '$OutputPath': contains invalid characters $charList."
+    }
+
+    # Task 2: drive existence check (skip for relative paths)
+    $qualifier = Split-Path -Path $OutputPath -Qualifier -ErrorAction SilentlyContinue
+    if (-not [string]::IsNullOrWhiteSpace($qualifier) -and -not (Test-Path -Path $qualifier)) {
+        throw "OutputPath '$OutputPath': drive '$qualifier' is not available."
+    }
+
+    # Task 3: directory target check
+    if (Test-Path -Path $OutputPath -PathType Container) {
+        throw "OutputPath '$OutputPath': must target a file, not a directory."
+    }
+
+    # Task 4: extension mismatch warning
+    $ext = [System.IO.Path]::GetExtension($OutputPath).ToLower()
+    $expectedExt = if ($OutputFormat -eq 'Json') { '.json' } else { '.csv' }
+    if ($ext -ne $expectedExt) {
+        Write-Warning "OutputPath '$OutputPath': extension '$ext' does not match OutputFormat '$OutputFormat'. Expected '$expectedExt'."
     }
 }
 
@@ -326,7 +358,7 @@ try {
         }
 
         'ExportSites' {
-            Assert-ExportParameter -Action $Action -OutputPath $OutputPath
+            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat
             $items = @((Get-UnifiSite -Context $context).data)
             Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat
             [pscustomobject]@{
@@ -339,7 +371,7 @@ try {
         }
 
         'ExportClients' {
-            Assert-ExportParameter -Action $Action -OutputPath $OutputPath
+            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat
             $items = @((Get-UnifiClient -Context $context -Site $Site).data)
             Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat
             [pscustomobject]@{
@@ -352,7 +384,7 @@ try {
         }
 
         'ExportDevices' {
-            Assert-ExportParameter -Action $Action -OutputPath $OutputPath
+            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat
             $items = @((Get-UnifiDevice -Context $context -Site $Site).data)
             Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat
             [pscustomobject]@{
@@ -365,7 +397,7 @@ try {
         }
 
         'ExportWlans' {
-            Assert-ExportParameter -Action $Action -OutputPath $OutputPath
+            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat
             $items = @((Get-UnifiWlan -Context $context -Site $Site).data)
             Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat
             [pscustomobject]@{
