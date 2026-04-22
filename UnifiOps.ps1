@@ -29,6 +29,9 @@ File path for export output. Required for export actions. Parent directory is cr
 .PARAMETER OutputFormat
 Output format for export actions. Valid values: Json, Csv. Default is Json.
 
+.PARAMETER Force
+Allows export actions to overwrite an existing file. Without this switch, exporting to an existing file path throws an error.
+
 .EXAMPLE
 .\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential) -Action Test
 Verifies the connection and returns the site count.
@@ -100,7 +103,9 @@ param(
     [string]$OutputPath,
 
     [ValidateSet('Json','Csv')]
-    [string]$OutputFormat = 'Json'
+    [string]$OutputFormat = 'Json',
+
+    [switch]$Force
 )
 
 Set-StrictMode -Version Latest
@@ -154,9 +159,9 @@ try {
         }
 
         'ExportSites' {
-            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat
+            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
             $items = @((Get-UnifiSite -Context $context).data)
-            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat
+            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
             [pscustomobject]@{
                 Success      = $true
                 Action       = $Action
@@ -167,9 +172,9 @@ try {
         }
 
         'ExportClients' {
-            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat
+            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
             $items = @((Get-UnifiClient -Context $context -Site $Site).data)
-            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat
+            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
             [pscustomobject]@{
                 Success      = $true
                 Action       = $Action
@@ -180,9 +185,9 @@ try {
         }
 
         'ExportDevices' {
-            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat
+            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
             $items = @((Get-UnifiDevice -Context $context -Site $Site).data)
-            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat
+            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
             [pscustomobject]@{
                 Success      = $true
                 Action       = $Action
@@ -193,9 +198,9 @@ try {
         }
 
         'ExportWlans' {
-            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat
+            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
             $items = @((Get-UnifiWlan -Context $context -Site $Site).data)
-            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat
+            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
             [pscustomobject]@{
                 Success      = $true
                 Action       = $Action

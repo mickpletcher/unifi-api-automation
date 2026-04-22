@@ -259,7 +259,8 @@ function Export-UnifiData {
     param(
         [Parameter(Mandatory)]$Data,
         [Parameter(Mandatory)][string]$OutputPath,
-        [Parameter(Mandatory)][string]$OutputFormat
+        [Parameter(Mandatory)][string]$OutputFormat,
+        [switch]$Force
     )
 
     $dir = Split-Path -Path $OutputPath -Parent
@@ -267,11 +268,14 @@ function Export-UnifiData {
         $null = New-Item -ItemType Directory -Path $dir -Force
     }
 
+    $writeParams = @{ Path = $OutputPath }
+    if ($Force) { $writeParams['Force'] = $true }
+
     if ($OutputFormat -eq 'Csv') {
-        $Data | Export-Csv -Path $OutputPath -NoTypeInformation -Force
+        $Data | Export-Csv -NoTypeInformation @writeParams
     }
     else {
-        $Data | ConvertTo-Json -Depth 10 | Set-Content -Path $OutputPath -Force
+        $Data | ConvertTo-Json -Depth 10 | Set-Content @writeParams
     }
 }
 
@@ -279,7 +283,8 @@ function Assert-ExportParameter {
     param(
         [Parameter(Mandatory)][string]$Action,
         [Parameter(Mandatory)][string]$OutputFormat,
-        [string]$OutputPath
+        [string]$OutputPath,
+        [switch]$Force
     )
 
     if ([string]::IsNullOrWhiteSpace($OutputPath)) {
@@ -305,6 +310,10 @@ function Assert-ExportParameter {
 
     if (Test-Path -Path $OutputPath -PathType Container) {
         throw "OutputPath '$OutputPath': must target a file, not a directory."
+    }
+
+    if ((Test-Path -Path $OutputPath -PathType Leaf) -and -not $Force) {
+        throw "OutputPath '$OutputPath': file already exists. Use -Force to overwrite."
     }
 
     $ext = [System.IO.Path]::GetExtension($OutputPath).ToLower()
