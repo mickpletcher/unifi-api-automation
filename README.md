@@ -1,191 +1,158 @@
 # UnifiOps
 
-PowerShell script for automating UniFi network operations via the UniFi REST API. Handles authentication, inventory queries, client control, and file exports.
+[![CI](https://github.com/mickpletcher/unifi-api-automation/actions/workflows/ci.yml/badge.svg)](https://github.com/mickpletcher/unifi-api-automation/actions/workflows/ci.yml)
 
-## Parameters
+PowerShell 7 module and script for the official local UniFi Network API.
 
-| Parameter | Required | Description |
+UnifiOps uses API key authentication, follows API pagination automatically, validates inputs before network calls, and produces stable objects and exports.
+
+## Requirements
+
+- PowerShell 7.0 or later
+- UniFi Network with the official local API available under Network > Control Plane > Integrations
+- A UniFi Network API key
+- HTTPS access to the UniFi console
+
+The implementation targets the [official UniFi Network API](https://developer.ui.com/network/v10.1.84/openapi.json) at `https://<console>/proxy/network/integration/v1`, documented for UniFi Network 10.1.84.
+
+## Quick start
+
+```powershell
+$apiKey = Read-Host 'UniFi API key' -AsSecureString
+
+.\UnifiOps.ps1 `
+    -BaseUrl 'https://192.168.1.1' `
+    -ApiKey $apiKey `
+    -Action Test
+```
+
+For a console using a self-signed certificate, add `-SkipCertificateCheck`. This is an explicit exception and should only be used on a trusted network.
+
+## Actions
+
+| Action | Required inputs | Result |
 | --- | --- | --- |
-| `-BaseUrl` | Always | UniFi controller URL, e.g. `https://192.168.1.1` |
-| `-Credential` | Always | PSCredential for UniFi login |
-| `-Action` | No | Action to run. Default is `Test` |
-| `-Site` | No | Site identifier. Default is `default` |
-| `-MacAddress` | For client actions | Client MAC address |
-| `-OutputPath` | For export actions | File path for export output |
-| `-OutputFormat` | For export actions | `Json` or `Csv`. Default is `Json` |
+| `Test` | None beyond connection inputs | Application information |
+| `GetSites` | None | All local sites |
+| `GetClients` | `SiteId` | Connected clients |
+| `GetDevices` | `SiteId` | Adopted devices |
+| `GetWlans` | `SiteId` | WiFi broadcasts |
+| `AuthorizeGuest` | `SiteId`, `ClientId` | Guest authorization response |
+| `UnauthorizeGuest` | `SiteId`, `ClientId` | Guest unauthorization response |
+| `ExportSites` | `OutputPath` | JSON or CSV export metadata |
+| `ExportClients` | `SiteId`, `OutputPath` | JSON or CSV export metadata |
+| `ExportDevices` | `SiteId`, `OutputPath` | JSON or CSV export metadata |
+| `ExportWlans` | `SiteId`, `OutputPath` | JSON or CSV export metadata |
 
-## Action Index
+`SiteId` and `ClientId` are official UUID values. Run `GetSites` and `GetClients` to discover them.
 
-| Action | Description |
-| --- | --- |
-| `Test` | Verify connection and return site count |
-| `Login` | Authenticate and return connection info |
-| `GetSites` | List all sites |
-| `GetClients` | List connected clients for a site |
-| `GetDevices` | List network devices for a site |
-| `GetWlans` | List WLAN configurations for a site |
-| `BlockClient` | Block a client by MAC address |
-| `UnblockClient` | Unblock a client by MAC address |
-| `ExportSites` | Export sites to JSON or CSV |
-| `ExportClients` | Export clients to JSON or CSV |
-| `ExportDevices` | Export devices to JSON or CSV |
-| `ExportWlans` | Export WLANs to JSON or CSV |
-| `Logout` | Log out of the current session |
-
-## Examples
-
-### Test Connection
+## Query examples
 
 ```powershell
-$credential = Get-Credential
+$sites = .\UnifiOps.ps1 `
+    -BaseUrl 'https://192.168.1.1' `
+    -ApiKey $apiKey `
+    -Action GetSites
 
+$siteId = [guid]$sites.Data[0].id
+
+$clients = .\UnifiOps.ps1 `
+    -BaseUrl 'https://192.168.1.1' `
+    -ApiKey $apiKey `
+    -Action GetClients `
+    -SiteId $siteId
+
+$clients.Data | Select-Object name, type, macAddress, ipAddress
+```
+
+Official filter expressions are passed with `-Filter` and URL encoded by the module.
+
+```powershell
 .\UnifiOps.ps1 `
-  -BaseUrl "https://192.168.1.1" `
-  -Credential $credential `
-  -Action Test
+    -BaseUrl 'https://192.168.1.1' `
+    -ApiKey $apiKey `
+    -Action GetDevices `
+    -SiteId $siteId `
+    -Filter "state.eq('ONLINE')"
 ```
 
-### Get Clients
+## Exports
+
+Export validation runs before any API request. JSON exports are always arrays, including zero and one item results. Files are written through a temporary file and moved into place only after serialization succeeds.
 
 ```powershell
-$credential = Get-Credential
-
 .\UnifiOps.ps1 `
-  -BaseUrl "https://192.168.1.1" `
-  -Credential $credential `
-  -Action GetClients `
-  -Site "default"
+    -BaseUrl 'https://192.168.1.1' `
+    -ApiKey $apiKey `
+    -Action ExportDevices `
+    -SiteId $siteId `
+    -OutputPath '.\reports\devices.json'
 ```
 
-### Get Clients as Readable JSON
+Use `-Force` to replace an existing file. The extension must be `.json` for JSON or `.csv` for CSV.
+
+## Guest access
+
+The official API supports guest authorization and unauthorization. These actions require the connected client UUID, not a MAC address.
 
 ```powershell
-$credential = Get-Credential
-
-(.\UnifiOps.ps1 `
-  -BaseUrl "https://192.168.1.1" `
-  -Credential $credential `
-  -Action GetClients).Data | ConvertTo-Json -Depth 10
-```
-
-### Get Clients with Selected Fields
-
-```powershell
-$credential = Get-Credential
-
-(.\UnifiOps.ps1 `
-  -BaseUrl "https://192.168.1.1" `
-  -Credential $credential `
-  -Action GetClients).Data |
-Select-Object name, hostname, ip, mac, oui, network, is_wired |
-Format-Table -AutoSize
-```
-
-### Get Active Clients
-
-Clients seen within the last 15 minutes.
-
-```powershell
-$credential = Get-Credential
-
-(.\UnifiOps.ps1 `
-  -BaseUrl "https://192.168.1.1" `
-  -Credential $credential `
-  -Action GetClients).Data |
-Where-Object { $_.last_seen -gt [DateTimeOffset]::UtcNow.AddMinutes(-15).ToUnixTimeSeconds() } |
-Select-Object name, hostname, ip, mac, last_seen |
-Format-Table -AutoSize
-```
-
-### Search Clients by Name or Vendor
-
-```powershell
-$credential = Get-Credential
-
-(.\UnifiOps.ps1 `
-  -BaseUrl "https://192.168.1.1" `
-  -Credential $credential `
-  -Action GetClients).Data |
-Where-Object {
-  $_.name -match "apple" -or
-  $_.hostname -match "apple" -or
-  $_.oui -match "apple"
-} |
-Select-Object name, hostname, ip, mac, oui |
-Format-Table -AutoSize
-```
-
-### Export Clients to JSON
-
-```powershell
-$credential = Get-Credential
-
 .\UnifiOps.ps1 `
-  -BaseUrl "https://192.168.1.1" `
-  -Credential $credential `
-  -Action ExportClients `
-  -OutputPath ".\clients.json"
+    -BaseUrl 'https://192.168.1.1' `
+    -ApiKey $apiKey `
+    -Action AuthorizeGuest `
+    -SiteId $siteId `
+    -ClientId $clientId `
+    -TimeLimitMinutes 120 `
+    -DataUsageLimitMBytes 500 `
+    -Confirm
 ```
 
-### Export Clients to CSV
+`-WhatIf` is supported. POST requests are never retried because their result may be uncertain after a transport failure.
+
+## Module usage
 
 ```powershell
-$credential = Get-Credential
+Import-Module .\UnifiOps\UnifiOps.psd1 -Force
 
-.\UnifiOps.ps1 `
-  -BaseUrl "https://192.168.1.1" `
-  -Credential $credential `
-  -Action ExportClients `
-  -OutputFormat Csv `
-  -OutputPath ".\clients.csv"
+$context = Connect-Unifi `
+    -BaseUrl 'https://192.168.1.1' `
+    -ApiKey $apiKey
+
+$devices = @(Get-UnifiDevice -Context $context -SiteId $siteId)
 ```
 
-### Export Devices to JSON
+`Invoke-UnifiOperation` provides the same standardized interface as the standalone script.
+
+## Result contract
+
+Every successful operation returns one object:
+
+```text
+Success   Boolean
+Action    String
+Data      Payload or export metadata
+ItemCount Integer for collection and export actions, otherwise null
+```
+
+Failures are terminating errors. UnifiOps does not replace controller or PowerShell exceptions with generic success objects.
+
+## Reliability controls
+
+- `MaxAttempts`: 1 through 10. Default 3.
+- `TimeoutSec`: 1 through 300. Default 30.
+- `PageSize`: 1 through 200. Default 200.
+- GET requests retry network failures and HTTP 408, 425, 429, 500, 502, 503, and 504.
+- Retry delay uses bounded exponential backoff with jitter and honors `Retry-After` when available.
+- Write requests are not retried.
+
+## Validation
 
 ```powershell
-$credential = Get-Credential
-
-.\UnifiOps.ps1 `
-  -BaseUrl "https://192.168.1.1" `
-  -Credential $credential `
-  -Action ExportDevices `
-  -OutputPath "C:\Reports\devices.json"
+Install-Module Pester -RequiredVersion 6.0.1 -Scope CurrentUser
+Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser
+./Invoke-Validation.ps1
 ```
 
-### Block a Client
+CI runs the same command on Windows and Ubuntu. It requires zero analyzer findings, all tests passing, and at least 80 percent command coverage.
 
-```powershell
-$credential = Get-Credential
-
-.\UnifiOps.ps1 `
-  -BaseUrl "https://192.168.1.1" `
-  -Credential $credential `
-  -Action BlockClient `
-  -MacAddress "aa:bb:cc:dd:ee:ff"
-```
-
-### Unblock a Client
-
-```powershell
-$credential = Get-Credential
-
-.\UnifiOps.ps1 `
-  -BaseUrl "https://192.168.1.1" `
-  -Credential $credential `
-  -Action UnblockClient `
-  -MacAddress "aa:bb:cc:dd:ee:ff"
-```
-
-## Output Path Validation
-
-Export actions validate `-OutputPath` before making any API call.
-
-| Condition | Behavior |
-| --- | --- |
-| `-OutputPath` not provided | Terminates with error |
-| Path contains invalid characters | Terminates with error naming the characters |
-| Path points to an existing directory | Terminates with error |
-| Drive or root does not exist | Terminates with error |
-| File extension does not match `-OutputFormat` | Writes a warning and continues |
-
-Parent directories are created automatically if they do not exist.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development instructions and [MIGRATION.md](docs/MIGRATION.md) for the 1.x breaking changes.

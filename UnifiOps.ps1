@@ -1,116 +1,123 @@
 <#
 .SYNOPSIS
-Automates UniFi network operations via the REST API.
+Runs supported operations against the official local UniFi Network API.
 
 .DESCRIPTION
-Single-script interface for authenticating, querying, controlling, and exporting UniFi network data.
-Handles API version detection automatically. Use -Action to select the operation.
+Uses API key authentication and the official /proxy/network/integration/v1 API. All list actions follow pagination automatically. Export validation runs before any network request.
 
 .PARAMETER BaseUrl
-URL of the UniFi controller, e.g. https://192.168.1.1.
+HTTPS URL for the UniFi console root, such as https://192.168.1.1.
 
-.PARAMETER Credential
-PSCredential containing the UniFi username and password. Use Get-Credential to build this securely.
+.PARAMETER ApiKey
+UniFi Network API key stored as a SecureString.
 
 .PARAMETER Action
-Operation to run. Valid values: Test, Login, GetSites, GetClients, GetDevices, GetWlans,
-BlockClient, UnblockClient, ExportSites, ExportClients, ExportDevices, ExportWlans, Logout.
-Default is Test.
+Operation to run. Test is the default.
 
-.PARAMETER Site
-UniFi site identifier. Default is 'default'.
+.PARAMETER SiteId
+Official UniFi site UUID. Required for site-scoped actions.
 
-.PARAMETER MacAddress
-Client MAC address. Required for BlockClient and UnblockClient.
+.PARAMETER ClientId
+Official connected client UUID. Required for guest access actions.
+
+.PARAMETER Filter
+Optional official UniFi API filter expression for list and export actions.
 
 .PARAMETER OutputPath
-File path for export output. Required for export actions. Parent directory is created if missing.
+Destination file for export actions.
 
 .PARAMETER OutputFormat
-Output format for export actions. Valid values: Json, Csv. Default is Json.
+Json or Csv. The filename extension must match.
 
 .PARAMETER Force
-Allows export actions to overwrite an existing file. Without this switch, exporting to an existing file path throws an error.
+Allows an export to replace an existing file.
 
-.PARAMETER RetryCount
-Number of attempts for each API request. Applies to transient failures such as HTTP 5xx responses and network errors. HTTP 4xx errors fail immediately regardless of this setting. Default is 3.
+.PARAMETER MaxAttempts
+Maximum attempts for safe GET requests after transient network, HTTP 408, 425, 429, or 5xx failures.
 
-.EXAMPLE
-.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential) -Action Test
-Verifies the connection and returns the site count.
+.PARAMETER TimeoutSec
+Timeout for each API request.
 
-.EXAMPLE
-.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential) -Action Login
-Authenticates and returns the detected login path and network prefix.
+.PARAMETER PageSize
+Number of records requested per page. The official maximum is 200.
 
-.EXAMPLE
-.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential) -Action GetSites
-Returns all sites on the controller.
+.PARAMETER SkipCertificateCheck
+Explicitly allows a self-signed or otherwise untrusted console certificate. Use only on a trusted network.
 
 .EXAMPLE
-.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential) -Action GetClients -Site 'default'
-Returns all connected clients for the default site.
+$apiKey = Read-Host 'UniFi API key' -AsSecureString
+.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -ApiKey $apiKey -Action Test
 
 .EXAMPLE
-.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential) -Action GetDevices -Site 'default'
-Returns all network devices for the default site.
+.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -ApiKey $apiKey -Action GetSites
 
 .EXAMPLE
-.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential) -Action GetWlans -Site 'default'
-Returns all WLAN configurations for the default site.
+.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -ApiKey $apiKey -Action GetClients -SiteId $siteId
 
 .EXAMPLE
-.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential) -Action BlockClient -MacAddress 'aa:bb:cc:dd:ee:ff'
-Blocks the client with the specified MAC address on the default site.
+.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -ApiKey $apiKey -Action ExportDevices -SiteId $siteId -OutputPath '.\devices.json'
 
 .EXAMPLE
-.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential) -Action UnblockClient -MacAddress 'aa:bb:cc:dd:ee:ff'
-Unblocks the client with the specified MAC address on the default site.
-
-.EXAMPLE
-.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential) -Action ExportSites -OutputPath '.\sites.json'
-Exports all sites to a JSON file.
-
-.EXAMPLE
-.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential) -Action ExportClients -OutputPath '.\clients.json'
-Exports all clients for the default site to a JSON file.
-
-.EXAMPLE
-.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential) -Action ExportDevices -OutputPath '.\devices.csv' -OutputFormat Csv
-Exports all devices for the default site to a CSV file.
-
-.EXAMPLE
-.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential) -Action ExportWlans -OutputPath '.\wlans.json'
-Exports all WLAN configurations for the default site to a JSON file.
-
-.EXAMPLE
-.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -Credential (Get-Credential) -Action Logout
-Logs out of the current session.
+.\UnifiOps.ps1 -BaseUrl 'https://192.168.1.1' -ApiKey $apiKey -Action AuthorizeGuest -SiteId $siteId -ClientId $clientId -TimeLimitMinutes 120 -Confirm
 #>
-[CmdletBinding()]
+[CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
 param(
     [Parameter(Mandatory)]
-    [string]$BaseUrl,
+    [uri]$BaseUrl,
 
     [Parameter(Mandatory)]
-    [PSCredential]$Credential,
+    [securestring]$ApiKey,
 
-    [ValidateSet('Login','GetSites','GetClients','GetDevices','GetWlans','BlockClient','UnblockClient','Logout','Test',
-                 'ExportSites','ExportClients','ExportDevices','ExportWlans')]
+    [ValidateSet(
+        'Test',
+        'GetSites',
+        'GetClients',
+        'GetDevices',
+        'GetWlans',
+        'AuthorizeGuest',
+        'UnauthorizeGuest',
+        'ExportSites',
+        'ExportClients',
+        'ExportDevices',
+        'ExportWlans'
+    )]
     [string]$Action = 'Test',
 
-    [string]$Site = 'default',
+    [guid]$SiteId = [guid]::Empty,
 
-    [string]$MacAddress,
+    [guid]$ClientId = [guid]::Empty,
+
+    [string]$Filter,
 
     [string]$OutputPath,
 
-    [ValidateSet('Json','Csv')]
+    [ValidateSet('Json', 'Csv')]
     [string]$OutputFormat = 'Json',
 
     [switch]$Force,
 
-    [int]$RetryCount = 3
+    [ValidateRange(1, 10)]
+    [int]$MaxAttempts = 3,
+
+    [ValidateRange(1, 300)]
+    [int]$TimeoutSec = 30,
+
+    [ValidateRange(1, 200)]
+    [int]$PageSize = 200,
+
+    [switch]$SkipCertificateCheck,
+
+    [ValidateRange(1, 1000000)]
+    [long]$TimeLimitMinutes,
+
+    [ValidateRange(1, 1048576)]
+    [long]$DataUsageLimitMBytes,
+
+    [ValidateRange(2, 100000)]
+    [long]$RxRateLimitKbps,
+
+    [ValidateRange(2, 100000)]
+    [long]$TxRateLimitKbps
 )
 
 Set-StrictMode -Version Latest
@@ -118,171 +125,4 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'UnifiOps\UnifiOps.Functions.ps1')
 
-try {
-    $context = Connect-Unifi -BaseUrl $BaseUrl -Credential $Credential -RetryCount $RetryCount
-
-    switch ($Action) {
-        'Login' {
-            [pscustomobject]@{
-                Success   = $true
-                Action    = $Action
-                Data      = [pscustomobject]@{
-                    BaseUrl       = $context.BaseUrl
-                    LoginPath     = $context.LoginPath
-                    NetworkPrefix = $context.NetworkPrefix
-                }
-                ItemCount = $null
-            }
-        }
-
-        'GetSites' {
-            $items = @((Get-UnifiSite -Context $context).data)
-            [pscustomobject]@{
-                Success   = $true
-                Action    = $Action
-                Data      = $items
-                ItemCount = $items.Count
-            }
-        }
-
-        'GetClients' {
-            $items = @((Get-UnifiClient -Context $context -Site $Site).data)
-            [pscustomobject]@{
-                Success   = $true
-                Action    = $Action
-                Data      = $items
-                ItemCount = $items.Count
-            }
-        }
-
-        'GetDevices' {
-            $items = @((Get-UnifiDevice -Context $context -Site $Site).data)
-            [pscustomobject]@{
-                Success   = $true
-                Action    = $Action
-                Data      = $items
-                ItemCount = $items.Count
-            }
-        }
-
-        'GetWlans' {
-            $items = @((Get-UnifiWlan -Context $context -Site $Site).data)
-            [pscustomobject]@{
-                Success   = $true
-                Action    = $Action
-                Data      = $items
-                ItemCount = $items.Count
-            }
-        }
-
-        'BlockClient' {
-            if ([string]::IsNullOrWhiteSpace($MacAddress)) {
-                throw "MacAddress is required for BlockClient."
-            }
-
-            Invoke-UnifiClientAction -Context $context -Site $Site -Command 'block-sta' -MacAddress $MacAddress
-            [pscustomobject]@{
-                Success   = $true
-                Action    = $Action
-                Data      = $null
-                ItemCount = $null
-            }
-        }
-
-        'UnblockClient' {
-            if ([string]::IsNullOrWhiteSpace($MacAddress)) {
-                throw "MacAddress is required for UnblockClient."
-            }
-
-            Invoke-UnifiClientAction -Context $context -Site $Site -Command 'unblock-sta' -MacAddress $MacAddress
-            [pscustomobject]@{
-                Success   = $true
-                Action    = $Action
-                Data      = $null
-                ItemCount = $null
-            }
-        }
-
-        'ExportSites' {
-            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
-            $items = @((Get-UnifiSite -Context $context).data)
-            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
-            [pscustomobject]@{
-                Success      = $true
-                Action       = $Action
-                OutputPath   = $OutputPath
-                OutputFormat = $OutputFormat
-                ItemCount    = $items.Count
-            }
-        }
-
-        'ExportClients' {
-            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
-            $items = @((Get-UnifiClient -Context $context -Site $Site).data)
-            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
-            [pscustomobject]@{
-                Success      = $true
-                Action       = $Action
-                OutputPath   = $OutputPath
-                OutputFormat = $OutputFormat
-                ItemCount    = $items.Count
-            }
-        }
-
-        'ExportDevices' {
-            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
-            $items = @((Get-UnifiDevice -Context $context -Site $Site).data)
-            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
-            [pscustomobject]@{
-                Success      = $true
-                Action       = $Action
-                OutputPath   = $OutputPath
-                OutputFormat = $OutputFormat
-                ItemCount    = $items.Count
-            }
-        }
-
-        'ExportWlans' {
-            Assert-ExportParameter -Action $Action -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
-            $items = @((Get-UnifiWlan -Context $context -Site $Site).data)
-            Export-UnifiData -Data $items -OutputPath $OutputPath -OutputFormat $OutputFormat -Force:$Force
-            [pscustomobject]@{
-                Success      = $true
-                Action       = $Action
-                OutputPath   = $OutputPath
-                OutputFormat = $OutputFormat
-                ItemCount    = $items.Count
-            }
-        }
-
-        'Logout' {
-            Disconnect-Unifi -Context $context
-            [pscustomobject]@{
-                Success   = $true
-                Action    = $Action
-                Data      = $null
-                ItemCount = $null
-            }
-        }
-
-        'Test' {
-            $sites = Get-UnifiSite -Context $context
-            [pscustomobject]@{
-                Success   = $true
-                Action    = $Action
-                Data      = [pscustomobject]@{
-                    BaseUrl       = $context.BaseUrl
-                    LoginPath     = $context.LoginPath
-                    NetworkPrefix = $context.NetworkPrefix
-                    SitesFound    = @($sites.data).Count
-                }
-                ItemCount = $null
-            }
-        }
-    }
-}
-finally {
-    if ($null -ne $context -and $Action -ne 'Logout') {
-        Disconnect-Unifi -Context $context
-    }
-}
+Invoke-UnifiOperation @PSBoundParameters
