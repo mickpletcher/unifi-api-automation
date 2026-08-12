@@ -22,7 +22,7 @@ This repo uses a three-file spec workflow per feature. Each feature gets its own
 
 ## How To Use
 
-Each step has a corresponding prompt file in the `prompts/` folder. Open the prompt in Claude and run it.
+Each step has a corresponding prompt file in the `prompts/` folder. Run it with the coding agent handling the change.
 
 1. Run `prompts/01-create-spec.md` to generate `spec.md`.
 2. Review and edit `spec.md`. Resolve all open questions before moving on.

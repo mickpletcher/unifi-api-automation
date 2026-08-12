@@ -1,3 +1,5 @@
 future-upgrades/
 .claude/
 UnifiOps.code-workspace
+TestResults.xml
+coverage.xml
